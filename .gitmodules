@@ -1,0 +1,6 @@
+[submodule "libs/zlog"]
+	path = libs/zlog
+	url = https://github.com/HardySimpson/zlog
+[submodule "libs/libuv"]
+	path = libs/libuv
+	url = https://github.com/libuv/libuv
