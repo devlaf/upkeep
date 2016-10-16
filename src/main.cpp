@@ -7,5 +7,5 @@ using namespace std;
 
 int main()
 {
-    return 0;
+    log_info("blah");
 }
