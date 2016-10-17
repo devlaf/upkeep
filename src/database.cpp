@@ -9,6 +9,12 @@
 #include "logger.h"
 #include "database.h"
 
+/*  TODO: Make this more async
+*	
+*	As this data is non-critical, I should be storing this in-memory, and 
+*	periodically flushing to disk.  No need to be this quite so consistent.
+*/
+
 bool create_directory(const char* fullPath)
 {
 	char cmd [256];
@@ -49,7 +55,6 @@ void init_database()
 	sqlite3_close(db);
 
 	log_info("SQLite database initialized");
-
 }
 
 void insert_uptime_entry(uptime_entry_t* entry)
