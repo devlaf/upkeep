@@ -17,9 +17,10 @@
 
 bool create_directory(const char* fullPath)
 {
-	char cmd [256];
-	strcpy(cmd,"mkdir -p ");
-	strcat(cmd,fullPath); 
+	const char* mkdir = "mkdir -p ";
+	char* cmd = (char*)malloc(sizeof(char)*(strlen(fullPath) + strlen(mkdir) + 1));
+	strcpy(cmd, mkdir);
+	strcat(cmd, fullPath); 
 	
 	if (0 == system(cmd))
 		return true;
