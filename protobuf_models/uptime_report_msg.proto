@@ -1,0 +1,5 @@
+message uptime_report_msg {
+  required string mac_address = 1;
+  required string description = 2;
+  required uint32 uptime = 3;
+}

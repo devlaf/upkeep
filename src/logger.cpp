@@ -29,11 +29,11 @@ void set_zlog_error_file()
 
 int get_total_length_with_args(const char* msg, va_list args)
 {
-	va_list argclone;
-	va_copy(argclone, args);
-	int len = vsnprintf(0, 0, msg, argclone);
-	va_end(argclone);
-	return (len + 1);
+    va_list argclone;
+    va_copy(argclone, args);
+    int len = vsnprintf(0, 0, msg, argclone);
+    va_end(argclone);
+    return (len + 1);
 }
 
 char* generate_str_from_args(const char* msg, va_list args)

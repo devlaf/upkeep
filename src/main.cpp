@@ -5,17 +5,23 @@
 #include "logger.h"
 #include "database.h"
 
-#define VERSION	0.1
+#define VERSION    0.1
 
 using namespace std;
 
 static char* listen_ip_addr = "0.0.0.0";
 static int   listen_port    = 12001;
 
+struct uptime_report_t {
+    char* mac_address;
+    char* description;
+    uint32_t uptime;
+};
+
 void shutdown_upkeep()
 {
-	log_info("Upkeep terminating.");
-	exit(0);
+    log_info("Upkeep terminating.");
+    exit(0);
 }
 
 void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) 
@@ -23,31 +29,48 @@ void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf)
     *buf = uv_buf_init((char*) malloc(suggested_size), suggested_size);
 }
 
+void on_close (uv_handle_t* handle) 
+{ 
+    free(handle); 
+}
+
+uptime_report_t* decode_unit (const char* buffer, int len)
+{
+    
+}
+
+void register_uptime_report (uv_stream_t* client, uptime_report_t* report)
+{
+
+}
+
 static void on_read_unit_complete(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf)
 {
-/*	Example from docs
+    uptime_report_t* uptime_data;
 
-	if (nread < 0){
-        if (nread == UV_EOF){
-            // end of file
-            uv_close((uv_handle_t *)&stdin_pipe, NULL);
-            uv_close((uv_handle_t *)&stdout_pipe, NULL);
-            uv_close((uv_handle_t *)&file_pipe, NULL);
-        }
-    } else if (nread > 0) {
-        write_data((uv_stream_t *)&stdout_pipe, nread, *buf, on_stdout_write);
-        write_data((uv_stream_t *)&file_pipe, nread, *buf, on_file_write);
-    }
+    if (0 == nread)
+        goto cleanup;
 
-    // OK to free buffer as write_data copies it.
+    if (nread < 0) {
+        uv_close((uv_handle_t*) client, on_close);
+        auto err = uv_err_name(nread);    // (per the docs) leaks a few bytes of memory for unknown err code
+        auto msg = uv_strerror(nread);    // ^^^
+        log_error("Error reading message from new connection: LibUV err [%s], LivUv msg [{%s}].", err, msg);
+        goto cleanup;
+    } 
+
+    uptime_data = decode_unit(buf->base, nread);
+    if (uptime_data != NULL)
+        register_uptime_report(client, uptime_data);
+        
+    cleanup:
     if (buf->base)
         free(buf->base);
-*/
 }
 
 void on_new_connection(uv_stream_t *server, int status) 
 {
-	if (status < 0) {
+    if (status < 0) {
         log_error("on_new_connection -- New connection error %s\n", uv_strerror(status));
         return;
     }
@@ -64,10 +87,10 @@ void on_new_connection(uv_stream_t *server, int status)
 
 void listen_for_connections()
 {
-	static uv_tcp_t server;
+    static uv_tcp_t server;
     uv_tcp_init(uv_default_loop(), &server);
 
-	struct sockaddr_in addr;
+    struct sockaddr_in addr;
     uv_ip4_addr(listen_ip_addr, listen_port, &addr);
     uv_tcp_bind(&server, (const struct sockaddr*)&addr, 0);
 
@@ -75,20 +98,20 @@ void listen_for_connections()
 
     int listen_resp = uv_listen((uv_stream_t*) &server, 500, on_new_connection);
     if (listen_resp != 0) {
-    	log_error("listen_for_connections -- listen error: %s, %s.",
-			uv_err_name(listen_resp),  uv_strerror(listen_resp));
-    	shutdown_upkeep();
+        log_error("listen_for_connections -- listen error: %s, %s.",
+            uv_err_name(listen_resp),  uv_strerror(listen_resp));
+        shutdown_upkeep();
     }
 }
 
 int main (int argc, char** argv)
 {
-	if( argc == 2 && (strcmp(argv[1], "-v") == 0) ) {
-		printf("Version: [%s].  And it's funny that you think this is versioned in any meaningful way.", VERSION);
-		return 0;
-	}
+    if( argc == 2 && (strcmp(argv[1], "-v") == 0) ) {
+        printf("Version: [%s].  And it's funny that you think this is versioned in any meaningful way.", VERSION);
+        return 0;
+    }
 
-	log_info("upkeep version: %f", VERSION);
+    log_info("upkeep version: %f", VERSION);
 
     init_database();
 

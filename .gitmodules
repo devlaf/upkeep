@@ -4,3 +4,6 @@
 [submodule "libs/libuv"]
 	path = libs/libuv
 	url = https://github.com/libuv/libuv
+[submodule "libs/protobuf-c"]
+	path = libs/protobuf-c
+	url = https://github.com/protobuf-c/protobuf-c
