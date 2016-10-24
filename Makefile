@@ -6,24 +6,30 @@ LINUX_DEBUGFLGS	        = -g
 LINUX_SHARED_LIBS       = -lpthread -ldl -lzlog
 LINUX_LINKER_PATH       = -L./libs/zlog/build/lib/
 LINUX_LD_FLAGS          = -Wl,-rpath,'$$ORIGIN'
-LINUX_STAT_LIBS_DEGUG   = ./libs/libuv/out/Debug/libuv.a ./libs/sqlite/bin/sqlite3.a
-LINUX_STAT_LIBS_RELEASE = ./libs/libuv/out/Release/libuv.a ./libs/sqlite/bin/sqlite3.a
+LINUX_STAT_LIBS_DEGUG   = ./libs/libuv/out/Debug/libuv.a ./libs/sqlite/bin/sqlite3.a ./libs/protobuf-c/protobuf-c/.libs/libprotobuf-c.a
+LINUX_STAT_LIBS_RELEASE = ./libs/libuv/out/Release/libuv.a ./libs/sqlite/bin/sqlite3.a ./libs/protobuf-c/protobuf-c/.libs/libprotobuf-c.a
 DEBUG_OUTPUT_PATH       = "./bin/DEBUG/"
 RELEASE_OUTPUT_PATH     = "/opt/upkeep/bin/"
 
 INCLUDES = -I./include/\
            -I./libs/libuv/include/\
            -I./libs/zlog/build/include/\
-           -I./libs/sqlite/
+           -I./libs/sqlite/\
+           -I./libs/protobuf-c/protobuf-c/\
+           -I./protobuf_models/
 
 SOURCES =	src/main.cpp \
             src/logger.cpp \
-            src/database.cpp
+            src/database.cpp \
+            src/serialization.cpp \
+            protobuf_models/uptime_report_msg.pb-c.c
 
 HEADERS =	./include/logger.h \
 			./include/database.h \
+			./include/serialization.h \
 			./libs/sqlite/sqlite3.h \
-			./libs/sqlite/sqlite3ext.h
+			./libs/sqlite/sqlite3ext.h \
+			protobuf_models/uptime_report_msg.pb-c.h
 
 default:
 	$(info ******** No target build specified.  Available targets are: linux, debuglinux, clean. ********)

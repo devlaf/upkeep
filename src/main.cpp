@@ -4,6 +4,7 @@
 #include "uv.h"
 #include "logger.h"
 #include "database.h"
+#include "serialization.h"
 
 #define VERSION    0.1
 
@@ -11,12 +12,6 @@ using namespace std;
 
 static char* listen_ip_addr = "0.0.0.0";
 static int   listen_port    = 12001;
-
-struct uptime_report_t {
-    char* mac_address;
-    char* description;
-    uint32_t uptime;
-};
 
 void shutdown_upkeep()
 {
@@ -34,14 +29,9 @@ void on_close (uv_handle_t* handle)
     free(handle); 
 }
 
-uptime_report_t* decode_unit (const char* buffer, int len)
-{
-    
-}
-
 void register_uptime_report (uv_stream_t* client, uptime_report_t* report)
 {
-
+    printf("got a report from %s", report->description);
 }
 
 static void on_read_unit_complete(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf)
@@ -55,11 +45,11 @@ static void on_read_unit_complete(uv_stream_t* client, ssize_t nread, const uv_b
         uv_close((uv_handle_t*) client, on_close);
         auto err = uv_err_name(nread);    // (per the docs) leaks a few bytes of memory for unknown err code
         auto msg = uv_strerror(nread);    // ^^^
-        log_error("Error reading message from new connection: LibUV err [%s], LivUv msg [{%s}].", err, msg);
+        log_error("Error reading message from new connection: LibUV err [%s], LibUv msg [{%s}].", err, msg);
         goto cleanup;
     } 
 
-    uptime_data = decode_unit(buf->base, nread);
+    uptime_data = deserialize_report(buf->base, nread);
     if (uptime_data != NULL)
         register_uptime_report(client, uptime_data);
         
