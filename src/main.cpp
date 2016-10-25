@@ -13,10 +13,18 @@ using namespace std;
 static char* listen_ip_addr = "0.0.0.0";
 static int   listen_port    = 12001;
 
-void shutdown_upkeep()
+void shutdown_upkeep(int return_code)
 {
     log_info("Upkeep terminating.");
+    force_log_flush();
     exit(0);
+}
+
+void register_interrupt_handlers()
+{
+    signal(SIGINT, shutdown_upkeep);
+    signal(SIGTERM, shutdown_upkeep);
+    signal(SIGHUP, shutdown_upkeep);
 }
 
 void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) 
@@ -90,7 +98,7 @@ void listen_for_connections()
     if (listen_resp != 0) {
         log_error("listen_for_connections -- listen error: %s, %s.",
             uv_err_name(listen_resp),  uv_strerror(listen_resp));
-        shutdown_upkeep();
+        shutdown_upkeep(-1);
     }
 }
 
@@ -102,6 +110,8 @@ int main (int argc, char** argv)
     }
 
     log_info("upkeep version: %f", VERSION);
+
+    register_interrupt_handlers();
 
     init_database();
 

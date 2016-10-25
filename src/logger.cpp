@@ -10,8 +10,6 @@
 
 using namespace std;
 
-std::mutex mtx;
-
 struct log_data_t {
     log_type type;
     char* msg;
@@ -20,6 +18,7 @@ struct log_data_t {
 typedef std::list<log_data_t*> log_data_list;
 static log_data_list* queued_logs = NULL;
 static bool flush_ongoing = false;
+static std::mutex mtx;
 
 void set_zlog_error_file()
 {
@@ -49,7 +48,7 @@ char* generate_str_from_args(const char* msg, va_list args)
 void log_synchronous (log_data_list* logs)
 {
     set_zlog_error_file();
-
+    
     int rc = zlog_init(zlog_config_filepath);
     if (rc) {
         printf("zlog init (synchronous) failed.  See zlog error file for details at [%s].\n", zlog_error_filepath);
@@ -98,7 +97,7 @@ void log_synchronous (log_data_list* logs)
 void flush_log_data (log_data_list* data)
 {
     log_synchronous(data);
-
+ 
     for(log_data_list::iterator i = data->begin();  i != data->end(); i++) {
 
         log_data_t* log_details = *i;
@@ -209,4 +208,12 @@ void log_synchronous (log_type type, const char* msg, ...)
     delete log_list;
 
     va_end(args);
+}
+
+void force_log_flush()
+{
+    mtx.lock();
+    if (NULL != queued_logs)
+        flush_log_data(queued_logs);
+    mtx.unlock();
 }

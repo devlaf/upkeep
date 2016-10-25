@@ -8,3 +8,4 @@ void log_synchronous (log_type type, const char* msg, ...);
 void log_info (const char* msg, ...);
 void log_warn (const char* msg, ...);
 void log_error (const char* msg, ...);
+void force_log_flush();
