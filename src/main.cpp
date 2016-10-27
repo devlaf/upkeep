@@ -37,9 +37,40 @@ void on_close (uv_handle_t* handle)
     free(handle); 
 }
 
+void on_device_reboot(uptime_report_t* report, int previous_uptime)
+{
+
+}
+
+void on_device_timeout(uptime_entry_t* last_record)
+{
+
+}
+
+time_t get_current_time()
+{
+    time_t rawtime;
+    time (&rawtime);
+    return rawtime;   
+}
+
+char* print_time_local(time_t rawtime)
+{
+    char* retval = (char*)malloc(sizeof(char) * 20);
+    struct tm* timeinfo = localtime(&rawtime);
+    strftime(retval, 20, "%Y-%m-%d %H:%M:%S", timeinfo);
+    return retval;
+}
+
 void register_uptime_report (uv_stream_t* client, uptime_report_t* report)
 {
-    printf("got a report from %s", report->description);
+    time_t current_time = get_current_time();
+    
+    char* current_time_str = print_time_local(current_time);
+    log_info("Report recieved from [%s] at time %s", report->description, current_time_str);
+    free(current_time_str);
+
+    //time_t last_recorded_uptime = 
 }
 
 static void on_read_unit_complete(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf)
@@ -105,7 +136,7 @@ void listen_for_connections()
 int main (int argc, char** argv)
 {
     if( argc == 2 && (strcmp(argv[1], "-v") == 0) ) {
-        printf("Version: [%s].  And it's funny that you think this is versioned in any meaningful way.", VERSION);
+        printf("Version: [%d].  And it's funny that you think this is versioned in any meaningful way.\n", VERSION);
         return 0;
     }
 

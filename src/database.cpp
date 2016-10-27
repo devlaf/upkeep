@@ -110,7 +110,7 @@ void insert_uptime_entry(uptime_entry_t* entry)
     sqlite3_close(db);
 }
 
-uptime_record* get_uptime_record()
+uptime_record* get_uptime_record_with_modifiers(const char* sql_query_modifiers)
 {
     sqlite3* db;
     sqlite3_stmt* stmt;
@@ -131,8 +131,15 @@ uptime_record* get_uptime_record()
         return NULL;
     }
 
-    const char* sql_query = "select * from uptime";
+    const char* sql_query_base = "select * from uptime ";
+
+    if (NULL == sql_query_modifiers)
+    	sql_query_modifiers = "\0";
+    char* sql_query = (char*)malloc(sizeof(char)*(strlen(sql_query_modifiers)) + 22);
+    sprintf(sql_query, "%s %s", sql_query_base, sql_query_modifiers);
+
     auto record_query = sqlite3_prepare_v2(db, sql_query, 256, &stmt, NULL);
+    free(sql_query);
     if (record_query != SQLITE_OK) {
         log_synchronous(ERROR, "get_uptime_record: Failed to execute the select query [%s]."
             "  SQLite Error: %d", sql_query, record_query);
@@ -168,4 +175,47 @@ uptime_record* get_uptime_record()
     sqlite3_close(db);
 
     return retval;
+}
+
+uptime_record* get_uptime_record()
+{
+	return get_uptime_record_with_modifiers(NULL);
+}
+
+time_t get_last_known_uptime(const char* mac_address)
+{
+	if (NULL == mac_address)
+    	return 0;
+
+	const char* where_clause_base = "WHERE mac_address='%s'";
+    char* where_clause = (char*)malloc(sizeof(char)*(strlen(mac_address)) + 21);
+    sprintf(where_clause, where_clause_base, mac_address);
+
+	uptime_record* record = get_uptime_record_with_modifiers(where_clause);
+
+	if (record->size() < 1)
+		return 0;
+
+	time_t retval = record->front()->uptime;	
+	free_uptime_record(record);
+	return retval;
+}
+
+void free_uptime_record(uptime_record* records)
+{
+	for(uptime_record::iterator i = records->begin();  i != records->end(); i++) {
+        uptime_entry_t* entry = *i;
+        free(entry->mac_address);
+        free(entry->description);
+        free(entry);
+    }
+
+    delete records;
+}
+
+void free_uptime_entry_t(uptime_entry_t* entry)
+{
+	free(entry->mac_address);
+	free(entry->description);
+	free(entry);
 }
