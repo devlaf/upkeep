@@ -20,13 +20,13 @@ static log_data_list* queued_logs = NULL;
 static bool flush_ongoing = false;
 static std::mutex mtx;
 
-void set_zlog_error_file()
+static void set_zlog_error_file()
 {
     if(NULL == getenv("ZLOG_PROFILE_ERROR"))
        setenv("ZLOG_PROFILE_ERROR", zlog_error_filepath, 0);
 }
 
-int get_total_length_with_args(const char* msg, va_list args)
+static int get_total_length_with_args(const char* msg, va_list args)
 {
     va_list argclone;
     va_copy(argclone, args);
@@ -35,7 +35,7 @@ int get_total_length_with_args(const char* msg, va_list args)
     return (len + 1);
 }
 
-char* generate_str_from_args(const char* msg, va_list args)
+static char* generate_str_from_args(const char* msg, va_list args)
 {
     int len = get_total_length_with_args(msg, args);
     char* full_message = (char*)malloc(sizeof(char)*(len + 1));
@@ -45,7 +45,7 @@ char* generate_str_from_args(const char* msg, va_list args)
     return full_message;
 }
 
-void log_synchronous (log_data_list* logs)
+static void log_synchronous (log_data_list* logs)
 {
     set_zlog_error_file();
     
@@ -94,7 +94,7 @@ void log_synchronous (log_data_list* logs)
     zlog_fini();
 }
 
-void flush_log_data (log_data_list* data)
+static void flush_log_data (log_data_list* data)
 {
     log_synchronous(data);
  
@@ -118,20 +118,22 @@ static void on_flushing_thread_done (uv_work_t* req, int status)
     if (0 != status)
         log_synchronous(ERROR, "Failed to flush log to file from thread.  Error Code: %d", status);
 
-    flush_ongoing = false;   
+    flush_ongoing = false;
+
+    free(req);
 }
 
-void schedule_flush()
+static void schedule_flush()
 {
     flush_ongoing = true;
 
     mtx.lock();
-    static uv_work_t req;
-    req.data = queued_logs;
+    uv_work_t* req = (uv_work_t*)malloc(sizeof(uv_work_t));
+    req->data = queued_logs;
     queued_logs = NULL;
     mtx.unlock();
 
-    uv_queue_work(uv_default_loop(), &req, on_flushing_thread, on_flushing_thread_done);
+    uv_queue_work(uv_default_loop(), req, on_flushing_thread, on_flushing_thread_done);
 }
 
 static log_data_list* get_queued_logs()
@@ -141,7 +143,7 @@ static log_data_list* get_queued_logs()
     return queued_logs;
 }
 
-void queue_log_generic(log_data_list* log_list, log_type type, const char* msg, va_list args)
+static void queue_log_generic(log_data_list* log_list, log_type type, const char* msg, va_list args)
 {
     if (NULL == msg || NULL == log_list)
         return;
@@ -155,7 +157,7 @@ void queue_log_generic(log_data_list* log_list, log_type type, const char* msg, 
     log_list->push_back(data);
 }
 
-void queue_log(log_type type, const char* msg, va_list args)
+static void queue_log(log_type type, const char* msg, va_list args)
 {
     mtx.lock();
     queue_log_generic(get_queued_logs(), type, msg, args);

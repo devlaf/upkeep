@@ -37,3 +37,13 @@ uint8_t* serialize_report (uptime_report_t* unit)
 
     return buf;
 }
+
+void free_uptime_report_t(uptime_report_t* report)
+{
+    if (NULL == report)
+        return;
+    
+    free(report->mac_address);
+    free(report->description);
+    free(report);
+}

@@ -7,3 +7,6 @@
 [submodule "libs/protobuf-c"]
 	path = libs/protobuf-c
 	url = https://github.com/protobuf-c/protobuf-c
+[submodule "libs/libwebsockets"]
+	path = libs/libwebsockets
+	url = https://github.com/warmcat/libwebsockets

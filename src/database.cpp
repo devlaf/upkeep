@@ -203,6 +203,9 @@ time_t get_last_known_uptime(const char* mac_address)
 
 void free_uptime_record(uptime_record* records)
 {
+	if(NULL == records)
+		return;
+
     for(uptime_record::iterator i = records->begin();  i != records->end(); i++) {
         uptime_entry_t* entry = *i;
         free(entry->mac_address);
@@ -215,6 +218,9 @@ void free_uptime_record(uptime_record* records)
 
 void free_uptime_entry_t(uptime_entry_t* entry)
 {
+	if(NULL == entry)
+		return;
+
     free(entry->mac_address);
     free(entry->description);
     free(entry);
