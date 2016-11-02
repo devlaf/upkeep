@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "libwebsockets.h"
+#include "uv.h"
 #include "serialization.h"
 #include "logger.h"
 #include "web_interface.h"
@@ -11,6 +12,10 @@
 // There are quite a few oddities about required protocol names and orderings 
 // (ex. PROTOCOL_HTTP must always be first, PROTOCOL_COUNT last, etc.)
 
+struct lws_context* context;
+static uv_timer_t* service_timer;
+static int service_timer_interval_ms = 500;   
+
 enum protocols 
 {
     PROTOCOL_HTTP = 0,
@@ -18,12 +23,12 @@ enum protocols
     PROTOCOL_COUNT
 };
 
-static int callback_http (struct libwebsocket_context * context, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len)
+static int callback_http (struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
 
 }
 
-static int callback_ws_event (struct libwebsocket_context * context, struct libwebsocket *wsi, enum libwebsocket_callback_reasons reason, void *user, void *in, size_t len)
+static int callback_ws_event (struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
 
 }
@@ -32,36 +37,75 @@ static struct lws_protocols protocols[] = {
     {
         "http-only",
         callback_http,
-        sizeof (struct per_session_data__http),
+        //sizeof (struct per_session_data__http),
         0,
     },
     {
         "ws-event",
         callback_ws_event,
-        sizeof(struct per_session_data__ws_event),
+        //sizeof(struct per_session_data__ws_event),
         0,
     },
     { NULL, NULL, 0, 0 }
 };
 
+static void on_lws_service_timer(uv_timer_t* handle)
+{
+    lws_service(context, 0);
+}
+
+static void start_lws_service_timer()
+{
+    if (NULL == service_timer)
+        service_timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
+
+    if (uv_is_active((uv_handle_t*)service_timer))
+        return;
+
+    uv_timer_init(uv_default_loop(), service_timer);
+    uv_timer_start(service_timer, on_lws_service_timer, 0, service_timer_interval_ms);
+}
+
+static lws_context* build_context(const char* interface)
+{
+    lws_context_creation_info info;
+    memset(&info, 0, sizeof info);
+
+    info.port = websocket_port;
+    info.iface = interface;
+    info.protocols = protocols;
+    info.extensions = lws_get_internal_extensions();
+    info.ssl_cert_filepath = NULL;          // Forgo ssl for the time being
+    info.ssl_private_key_filepath = NULL;   // ^^^
+    info.gid = -1;
+    info.uid = -1;
+    info.options = 0;                       // No special options
+
+    return lws_create_context(&info);
+}
+
 void init_webserver()
 {
-    cost char* interface = NULL;
+    const char* interface = NULL;
 
-    // Forgo ssl for the time being
-    const char* cert_path = NULL;
-    const char* key_path = NULL;
-
-    int opts = 0;   // No special options
-
-    auto context = libwebsocket_create_context( websocket_port, interface, protocols, 
-                                                libwebsocket_internal_extensions, 
-                                                cert_path, key_path, -1, -1, opts);    
-
-    if (NULL == context) {
+    context = build_context(interface);
+    if (context == NULL) {
         log_error("Failed to init the libwebsocket server.");
         return;
     }
 
-    // https://gist.github.com/martinsik/3654228
+    start_lws_service_timer();
+
+    log_info("Web interface started.");
+}
+
+void shutdown_webserver()
+{
+    if (service_timer != NULL && uv_is_active((uv_handle_t*)service_timer))
+        uv_timer_stop(service_timer);
+
+    if(context)
+        lws_context_destroy(context);
+
+    log_info("Web interface stopped.");
 }

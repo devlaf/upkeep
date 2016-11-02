@@ -5,6 +5,7 @@
 #include "database.h"
 #include "serialization.h"
 #include "time_utils.h"
+#include "web_interface.h"
 
 #define VERSION    0.1
 
@@ -28,6 +29,8 @@ void shutdown_upkeep(int return_code)
             uv_timer_stop(outage_timer);
         free(outage_timer);
     }
+
+    shutdown_webserver();
 
     exit(0);
 }
@@ -181,7 +184,7 @@ void listen_for_connections()
     uv_ip4_addr(listen_ip_addr, listen_port, &addr);
     uv_tcp_bind(&server, (const struct sockaddr*)&addr, 0);
 
-    server.data = (void *)on_read_unit_complete;
+    server.data = (void*)on_read_unit_complete;
 
     int listen_resp = uv_listen((uv_stream_t*) &server, 500, on_new_connection);
     if (listen_resp != 0) {
@@ -205,6 +208,8 @@ int main (int argc, char** argv)
     init_database();
 
     listen_for_connections();
+    
+    init_webserver();
 
     return uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 }
