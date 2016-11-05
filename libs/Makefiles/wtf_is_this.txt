@@ -1,0 +1,5 @@
+This is a jenky way of mananging dependent libraries.  Currently, dependencies for this project live in the libs/ directory as submodules, and they use a variety of disjoint build systems, including gyp, cmake, and build tools.  If those build tools are capable of generating a Makefile, I have copied that makefile into a dependency-specific directory under libs/Makefiles/.  Additionally, there should be a script in each that can copy the makefile back into the submodule directory tree and run make.
+
+These will need to be updated every time we pull in the latest for the dependency submodules.
+
+
