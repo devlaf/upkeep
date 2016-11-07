@@ -15,7 +15,7 @@ typedef std::list<uptime_entry_t*> uptime_record;
 
 void init_database();
 uptime_record* get_uptime_record();
-time_t get_last_known_uptime(const char* mac_address);
+uint32_t get_last_known_uptime(const char* mac_address);
 void insert_uptime_entry(uptime_entry_t* entry);
 void free_uptime_entry_t(uptime_entry_t* entry);
 void free_uptime_record(uptime_record* records);

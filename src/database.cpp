@@ -70,7 +70,7 @@ void insert_uptime_entry(uptime_entry_t* entry)
         _exit(SIGTERM);
     }
 
-    sqlite3_busy_timeout(db, 1000*60);  // Wait 60 seconds for the lock
+    sqlite3_busy_timeout(db, 100);  // Wait 100 ms for the lock
 
     auto begin_transaction = sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, NULL);
     if(begin_transaction != SQLITE_OK) {
@@ -122,7 +122,7 @@ uptime_record* get_uptime_record_with_modifiers(const char* sql_query_modifiers)
         return NULL;
     }
 
-    sqlite3_busy_timeout(db, 1000*60);  // Wait 60 seconds for the lock
+    sqlite3_busy_timeout(db, 100);  // Wait 100 ms for the lock
 
     auto begin_transaction = sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, NULL);
     if(begin_transaction != SQLITE_OK) {
@@ -182,7 +182,7 @@ uptime_record* get_uptime_record()
     return get_uptime_record_with_modifiers(NULL);
 }
 
-time_t get_last_known_uptime(const char* mac_address)
+uint32_t get_last_known_uptime(const char* mac_address)
 {
     if (NULL == mac_address)
         return 0;
@@ -196,7 +196,7 @@ time_t get_last_known_uptime(const char* mac_address)
     if (record->size() < 1)
         return 0;
 
-    time_t retval = record->front()->uptime;    
+    uint32_t retval = record->front()->uptime;    
     free_uptime_record(record);
     return retval;
 }

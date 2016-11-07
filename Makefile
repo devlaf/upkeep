@@ -3,11 +3,7 @@ PROJECT = upkeep
 LINUX_CXX               = g++
 LINUX_CPPFLAGS          = -Wall -D_GNU_SOURCE $(LIB_PATH) -Wno-write-strings -DLINUX
 LINUX_DEBUGFLGS	        = -g
-<<<<<<< Updated upstream
-LINUX_SHARED_LIBS       = -lpthread -ldl -lzlog -lssl -lcrypto
-=======
-LINUX_SHARED_LIBS       = -lpthread -ldl -lzlog -std=c++11
->>>>>>> Stashed changes
+LINUX_SHARED_LIBS       = -lpthread -ldl -lzlog -lssl -lcrypto -std=c++11
 LINUX_LINKER_PATH       = -L./libs/zlog/build/lib/
 LINUX_LD_FLAGS          = -Wl,-rpath,'$$ORIGIN'
 LINUX_STAT_LIBS_DEGUG   = ./libs/libuv/out/Debug/libuv.a ./libs/sqlite/bin/sqlite3.a ./libs/protobuf-c/protobuf-c/.libs/libprotobuf-c.a ./libs/libwebsockets/build/lib/libwebsockets.a

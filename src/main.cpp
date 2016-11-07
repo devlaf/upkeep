@@ -9,8 +9,6 @@
 
 #define VERSION    0.1
 
-using namespace std;
-
 static char* listen_ip_addr = "0.0.0.0";
 static int   listen_port    = 12001;
 
@@ -208,7 +206,7 @@ int main (int argc, char** argv)
     init_database();
 
     listen_for_connections();
-    
+
     init_webserver();
 
     return uv_run(uv_default_loop(), UV_RUN_DEFAULT);

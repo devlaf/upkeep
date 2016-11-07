@@ -25,12 +25,12 @@ enum protocols
 
 static int callback_http (struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
-
+    return 0;
 }
 
 static int callback_ws_event (struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
-
+    return 0;
 }
 
 static struct lws_protocols protocols[] = {
@@ -48,23 +48,6 @@ static struct lws_protocols protocols[] = {
     },
     { NULL, NULL, 0, 0 }
 };
-
-static void on_lws_service_timer(uv_timer_t* handle)
-{
-    lws_service(context, 0);
-}
-
-static void start_lws_service_timer()
-{
-    if (NULL == service_timer)
-        service_timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
-
-    if (uv_is_active((uv_handle_t*)service_timer))
-        return;
-
-    uv_timer_init(uv_default_loop(), service_timer);
-    uv_timer_start(service_timer, on_lws_service_timer, 0, service_timer_interval_ms);
-}
 
 static lws_context* build_context(const char* interface)
 {
@@ -84,6 +67,25 @@ static lws_context* build_context(const char* interface)
     return lws_create_context(&info);
 }
 
+static void on_lws_service_timer(uv_timer_t* handle)
+{
+    lws_service(context, 0);
+}
+
+static void start_lws_service_timer()
+{
+    if (NULL == service_timer)
+        service_timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
+
+    if (uv_is_active((uv_handle_t*)service_timer))
+        return;
+
+    uv_timer_init(uv_default_loop(), service_timer);
+    uv_timer_start(service_timer, on_lws_service_timer, service_timer_interval_ms, service_timer_interval_ms);
+
+    log_info("Web interface started.");
+}
+
 void init_webserver()
 {
     const char* interface = NULL;
@@ -95,8 +97,6 @@ void init_webserver()
     }
 
     start_lws_service_timer();
-
-    log_info("Web interface started.");
 }
 
 void shutdown_webserver()
