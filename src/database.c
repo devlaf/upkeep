@@ -1,7 +1,7 @@
-#include <iostream>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <signal.h>
 #include <unistd.h>
 #include <time.h>
@@ -39,14 +39,14 @@ void init_database()
     if (!create_directory(SQLite_db_directory))
         _exit(SIGTERM);
 
-    auto open = sqlite3_open(SQLite_db_filepath, &db);
+    int open = sqlite3_open(SQLite_db_filepath, &db);
     if (open != SQLITE_OK) {
         log_synchronous(ERROR, "init_database: Failed to open the database at [%s]. "
             "SQLite Error: %d", SQLite_db_filepath, open);
         _exit(SIGTERM);
     }
 
-    auto create_table = sqlite3_exec(db, create_table_script, NULL, NULL, NULL);
+    int create_table = sqlite3_exec(db, create_table_script, NULL, NULL, NULL);
     if (create_table != SQLITE_OK) {
         log_synchronous(ERROR, "init_database: Failed to setup tables in the database. "
             "SQLite Error: %d", create_table);
@@ -63,7 +63,7 @@ void insert_uptime_entry(uptime_entry_t* entry)
     sqlite3* db = NULL;
     sqlite3_stmt* stmt = NULL;
     
-    auto open = sqlite3_open(SQLite_db_filepath, &db);
+    int open = sqlite3_open(SQLite_db_filepath, &db);
     if (open != SQLITE_OK) {
         log_synchronous(ERROR, "insert_uptime_entry: Failed to open the database at [%s]. "
             "SQLite Error: %d", SQLite_db_filepath, open);
@@ -72,7 +72,7 @@ void insert_uptime_entry(uptime_entry_t* entry)
 
     sqlite3_busy_timeout(db, 100);  // Wait 100 ms for the lock
 
-    auto begin_transaction = sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, NULL);
+    int begin_transaction = sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, NULL);
     if(begin_transaction != SQLITE_OK) {
         log_synchronous(ERROR, "insert_uptime_entry: Failed to begin transaction."
             " SQLite Error: %d", begin_transaction);
@@ -81,7 +81,7 @@ void insert_uptime_entry(uptime_entry_t* entry)
 
     static const char* query = "INSERT INTO uptime VALUES (@mac_address, @description, @uptime, @last_update)";
     
-    auto insert = sqlite3_prepare_v2(db, query, 256, &stmt, NULL);
+    int insert = sqlite3_prepare_v2(db, query, 256, &stmt, NULL);
     if(insert != SQLITE_OK) {
         log_synchronous(ERROR, "insert_uptime_entry: Failed to insert into db. "
             "SQLite Error: %d", insert);
@@ -99,7 +99,7 @@ void insert_uptime_entry(uptime_entry_t* entry)
         sqlite3_reset(stmt);
     }
 
-    auto end_transaction = sqlite3_exec(db, "END TRANSACTION", NULL, NULL, NULL);
+    int end_transaction = sqlite3_exec(db, "END TRANSACTION", NULL, NULL, NULL);
     if(end_transaction != SQLITE_OK) {
         log_synchronous(ERROR, "insert_uptime_entry: Failed to end transaction."
             " SQLite Error: %d", end_transaction);
@@ -115,7 +115,7 @@ uptime_record* get_uptime_record_with_modifiers(const char* sql_query_modifiers)
     sqlite3* db;
     sqlite3_stmt* stmt;
 
-    auto open = sqlite3_open(SQLite_db_filepath, &db);
+    int open = sqlite3_open(SQLite_db_filepath, &db);
     if (open != SQLITE_OK) {
         log_synchronous(ERROR, "get_uptime_record: Failed to open the database at [%s]."
             "  SQLite Error: %d", SQLite_db_filepath, open);
@@ -124,7 +124,7 @@ uptime_record* get_uptime_record_with_modifiers(const char* sql_query_modifiers)
 
     sqlite3_busy_timeout(db, 100);  // Wait 100 ms for the lock
 
-    auto begin_transaction = sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, NULL);
+    int begin_transaction = sqlite3_exec(db, "BEGIN TRANSACTION", NULL, NULL, NULL);
     if(begin_transaction != SQLITE_OK) {
         log_synchronous(ERROR, "get_uptime_record: Failed to begin transaction. "
             "SQLite Error: %d", begin_transaction);
@@ -138,7 +138,7 @@ uptime_record* get_uptime_record_with_modifiers(const char* sql_query_modifiers)
     char* sql_query = (char*)malloc(sizeof(char)*(strlen(sql_query_modifiers)) + 22);
     sprintf(sql_query, "%s %s", sql_query_base, sql_query_modifiers);
 
-    auto record_query = sqlite3_prepare_v2(db, sql_query, 256, &stmt, NULL);
+    int record_query = sqlite3_prepare_v2(db, sql_query, 256, &stmt, NULL);
     free(sql_query);
     if (record_query != SQLITE_OK) {
         log_synchronous(ERROR, "get_uptime_record: Failed to execute the select query [%s]."
@@ -146,7 +146,7 @@ uptime_record* get_uptime_record_with_modifiers(const char* sql_query_modifiers)
         return NULL;
     }
 
-    auto retval = new uptime_record();
+    uptime_record* retval = list_init();
 
     while(sqlite3_step(stmt) == SQLITE_ROW) {
         uptime_entry_t* record = (uptime_entry_t*)calloc(1, sizeof(uptime_entry_t));
@@ -161,10 +161,10 @@ uptime_record* get_uptime_record_with_modifiers(const char* sql_query_modifiers)
         record->uptime = uptime;
         record->last_update = last_update;
 
-        retval->push_back(record);
+        list_append(retval, record);
     }
 
-    auto end_transaction = sqlite3_exec(db, "END TRANSACTION", NULL, NULL, NULL);
+    int end_transaction = sqlite3_exec(db, "END TRANSACTION", NULL, NULL, NULL);
     if(end_transaction != SQLITE_OK) {
         log_synchronous(ERROR, "get_uptime_record: Failed to end transaction. "
             "SQLite Error: %d", end_transaction);
@@ -193,27 +193,17 @@ uint32_t get_last_known_uptime(const char* mac_address)
 
     uptime_record* record = get_uptime_record_with_modifiers(where_clause);
 
-    if (record->size() < 1)
-        return 0;
-
-    uint32_t retval = record->front()->uptime;    
+    if (NULL == record->head)
+    	return 0;
+    
+    uint32_t retval = ((uptime_entry_t*)(record->head->data))->uptime;
     free_uptime_record(record);
     return retval;
 }
 
-void free_uptime_record(uptime_record* records)
+void uptime_record_foreach(uptime_record* collection, void (*fptr)(uptime_entry_t*, void*), void* args)
 {
-	if(NULL == records)
-		return;
-
-    for(uptime_record::iterator i = records->begin();  i != records->end(); i++) {
-        uptime_entry_t* entry = *i;
-        free(entry->mac_address);
-        free(entry->description);
-        free(entry);
-    }
-
-    delete records;
+    list_foreach(collection, (void(*)(void*, void*))&fptr, args);
 }
 
 void free_uptime_entry_t(uptime_entry_t* entry)
@@ -224,4 +214,19 @@ void free_uptime_entry_t(uptime_entry_t* entry)
     free(entry->mac_address);
     free(entry->description);
     free(entry);
+}
+
+void free_uptime_entry_t_with_args(uptime_entry_t* entry, void* args)
+{
+	free_uptime_entry_t(entry);
+}
+
+void free_uptime_record(uptime_record* records)
+{
+	if(NULL == records)
+		return;
+
+    uptime_record_foreach(records, free_uptime_entry_t_with_args, NULL);
+    
+    list_free(records);
 }

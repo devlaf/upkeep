@@ -1,5 +1,5 @@
-#include <iostream>
 #include <stdio.h>
+#include <stdlib.h>
 #include "uv.h"
 #include "logger.h"
 #include "database.h"
@@ -66,18 +66,18 @@ void on_device_timeout(uptime_entry_t* record)
     printf("weeeewoooo");
 }
 
+void assess_timeout_criteria(uptime_entry_t* entry, void* current_time)
+{
+    if (((time_t)current_time - entry->last_update) > outage_timer_threshold_sec )
+        on_device_timeout(entry);
+}
+
 void on_outage_timer(uv_timer_t* handle)
 {
     uptime_record* record = get_uptime_record();
 
-    for(uptime_record::iterator i = record->begin();  i != record->end(); i++) {
-
-        uptime_entry_t* entry = *i;
-        if ((get_current_time() - entry->last_update) > outage_timer_threshold_sec ) {
-            on_device_timeout(entry);
-        }
-    }
-
+    uptime_record_foreach(record, assess_timeout_criteria, (void*) get_current_time());
+    
     free_uptime_record(record);
 }
 
@@ -138,8 +138,8 @@ void on_read_unit_complete(uv_stream_t* client, ssize_t nread, const uv_buf_t* b
 
     if (nread < 0) {
         uv_close((uv_handle_t*) client, on_close);
-        auto err = uv_err_name(nread);    // (per the docs) leaks a few bytes of memory for unknown err code
-        auto msg = uv_strerror(nread);    // ^^^
+        const char* err = uv_err_name(nread);    // (per the docs) leaks a few bytes of memory for unknown err code
+        const char* msg = uv_strerror(nread);    // ^^^
         log_error("Error reading message from new connection: LibUV err [%s], LibUv msg [{%s}].", err, msg);
         goto cleanup;
     } 

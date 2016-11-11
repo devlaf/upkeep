@@ -1,9 +1,9 @@
 PROJECT = upkeep
 
-LINUX_CXX               = g++
+LINUX_CXX               = gcc
 LINUX_CPPFLAGS          = -Wall -D_GNU_SOURCE $(LIB_PATH) -Wno-write-strings -DLINUX
 LINUX_DEBUGFLGS	        = -g
-LINUX_SHARED_LIBS       = -lpthread -ldl -lzlog -lssl -lcrypto -std=c++11
+LINUX_SHARED_LIBS       = -lpthread -ldl -lzlog -lssl -lcrypto
 LINUX_LINKER_PATH       = -L./libs/zlog/build/lib/
 LINUX_LD_FLAGS          = -Wl,-rpath,'$$ORIGIN'
 LINUX_STAT_LIBS_DEGUG   = ./libs/libuv/out/Debug/libuv.a ./libs/sqlite/bin/sqlite3.a ./libs/protobuf-c/protobuf-c/.libs/libprotobuf-c.a ./libs/libwebsockets/build/lib/libwebsockets.a
@@ -20,12 +20,13 @@ INCLUDES = -I./include/\
            -I./libs/protobuf-c/protobuf-c/\
            -I./protobuf_models/
 
-SOURCES =	src/main.cpp \
-            src/logger.cpp \
-            src/database.cpp \
-            src/serialization.cpp \
-            src/time_utils.cpp \
-            src/web_interface.cpp \
+SOURCES =	src/main.c \
+            src/logger.c \
+            src/database.c \
+            src/serialization.c \
+            src/time_utils.c \
+            src/web_interface.c \
+            src/list.c \
             protobuf_models/uptime_report_msg.pb-c.c
 
 HEADERS =	./include/logger.h \
@@ -33,6 +34,7 @@ HEADERS =	./include/logger.h \
 			./include/serialization.h \
 			./include/time_utils.h \
 			./include/web_interface.h \
+			./include/list.h \
 			./libs/sqlite/sqlite3.h \
 			./libs/sqlite/sqlite3ext.h \
 			./libs/libwebsockets/lib/libwebsockets.h \

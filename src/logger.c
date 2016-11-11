@@ -1,24 +1,20 @@
-#include <iostream>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <list>
-#include <mutex>
+#include <stdbool.h>
 #include "uv.h"
 #include "zlog.h"
 #include "logger.h"
+#include "list.h"
 
-using namespace std;
-
-struct log_data_t {
+typedef struct log_data_t {
     log_type type;
     char* msg;
-};
+} log_data_t;
 
-typedef std::list<log_data_t*> log_data_list;
-static log_data_list* queued_logs = NULL;
+static list* queued_logs;
 static bool flush_ongoing = false;
-static std::mutex mtx;
+static uv_rwlock_t queued_logs_lock;
 
 static void set_zlog_error_file()
 {
@@ -45,7 +41,37 @@ static char* generate_str_from_args(const char* msg, va_list args)
     return full_message;
 }
 
-static void log_synchronous (log_data_list* logs)
+static void log_single_entry_synchronous(void* single_entry, void* category)
+{
+    log_data_t* log_details = (log_data_t*)single_entry;
+    zlog_category_t* c = (zlog_category_t*)category;
+
+    switch(log_details->type) {
+        case FATAL:
+            zlog_fatal(c, log_details->msg);
+            printf("FATAL: %s\n", log_details->msg);
+            break;
+        case ERROR:
+            zlog_error(c, log_details->msg);
+            printf("ERROR: %s\n", log_details->msg);
+            break;
+        case WARN:
+            zlog_warn(c, log_details->msg);
+            printf("WARNING: %s\n", log_details->msg);
+            break;
+        case INFO:
+            zlog_info(c, log_details->msg);
+            printf("INFO: %s\n", log_details->msg);
+            break;
+        case DEBUG:
+        default:
+            zlog_notice(c, log_details->msg);
+            printf("DEBUG: %s\n", log_details->msg);
+            break;
+    }
+}
+
+static void log_collection_synchronous (list* logs)
 {
     set_zlog_error_file();
     
@@ -55,62 +81,38 @@ static void log_synchronous (log_data_list* logs)
         return;
     }
 
-    zlog_category_t* c = zlog_get_category(zlog_category);
-    if (!c) {
+    zlog_category_t* category = zlog_get_category(zlog_category);
+    if (!category) {
         printf("Could not find configuration for zlog category [%s] in %s.\n", zlog_category, zlog_config_filepath);
         zlog_fini();
         return;
     }
 
-    for(log_data_list::iterator i = logs->begin();  i != logs->end(); i++) {
-
-        log_data_t* log_details = *i;
-        
-        switch(log_details->type) {
-            case FATAL:
-                zlog_fatal(c, log_details->msg);
-                printf("FATAL: %s\n", log_details->msg);
-                break;
-            case ERROR:
-                zlog_error(c, log_details->msg);
-                printf("ERROR: %s\n", log_details->msg);
-                break;
-            case WARN:
-                zlog_warn(c, log_details->msg);
-                printf("WARNING: %s\n", log_details->msg);
-                break;
-            case INFO:
-                zlog_info(c, log_details->msg);
-                printf("INFO: %s\n", log_details->msg);
-                break;
-            case DEBUG:
-            default:
-                zlog_notice(c, log_details->msg);
-                printf("DEBUG: %s\n", log_details->msg);
-                break;
-        }
-    }
+    list_foreach(logs, log_single_entry_synchronous, category);
 
     zlog_fini();
 }
 
-static void flush_log_data (log_data_list* data)
+static void free_log_details(void* data, void* args)
 {
-    log_synchronous(data);
- 
-    for(log_data_list::iterator i = data->begin();  i != data->end(); i++) {
-
-        log_data_t* log_details = *i;
+    if (data) {
+        log_data_t* log_details = (log_data_t*)data;
         free(log_details->msg);
         free(log_details);
     }
+}
 
-    delete data;
+static void flush_log_data (list* data)
+{
+    log_collection_synchronous(data);
+
+    list_foreach(data, free_log_details, NULL);
+    list_free(data);
 }
 
 static void on_flushing_thread (uv_work_t* req)
 {
-    flush_log_data((log_data_list*)req->data);
+    flush_log_data((list*)req->data);
 }
 
 static void on_flushing_thread_done (uv_work_t* req, int status)
@@ -127,23 +129,24 @@ static void schedule_flush()
 {
     flush_ongoing = true;
 
-    mtx.lock();
     uv_work_t* req = (uv_work_t*)malloc(sizeof(uv_work_t));
+    uv_rwlock_wrlock(&queued_logs_lock);
     req->data = queued_logs;
     queued_logs = NULL;
-    mtx.unlock();
+
+    uv_rwlock_wrunlock(&queued_logs_lock);
 
     uv_queue_work(uv_default_loop(), req, on_flushing_thread, on_flushing_thread_done);
 }
 
-static log_data_list* get_queued_logs()
+static list* get_queued_logs()
 {
     if (NULL == queued_logs)
-        queued_logs = new log_data_list();
+        queued_logs = list_init();
     return queued_logs;
 }
 
-static void queue_log_generic(log_data_list* log_list, log_type type, const char* msg, va_list args)
+static void queue_log_generic(list* log_list, log_type type, const char* msg, va_list args)
 {
     if (NULL == msg || NULL == log_list)
         return;
@@ -154,14 +157,14 @@ static void queue_log_generic(log_data_list* log_list, log_type type, const char
     data ->type = type;
     data ->msg = full_message;
 
-    log_list->push_back(data);
+    list_append(log_list, data);
 }
 
 static void queue_log(log_type type, const char* msg, va_list args)
 {
-    mtx.lock();
+    uv_rwlock_wrlock(&queued_logs_lock);
     queue_log_generic(get_queued_logs(), type, msg, args);
-    mtx.unlock();
+    uv_rwlock_wrunlock(&queued_logs_lock);
 
     if (!flush_ongoing)
         schedule_flush();
@@ -197,25 +200,25 @@ void log_synchronous (log_type type, const char* msg, ...)
     va_start(args, msg);
 
     log_data_t* data = (log_data_t*)malloc(sizeof(log_data_t));
-    data ->type = type;
-    data ->msg = generate_str_from_args(msg, args);
+    data->type = type;
+    data->msg = generate_str_from_args(msg, args);
 
-    auto log_list = new log_data_list();
-    log_list->push_back(data);
+    list* log_list = list_init();
+    list_append(log_list, data);
 
-    log_synchronous(log_list);
+    log_collection_synchronous(log_list);
 
     free(data->msg);
     free(data);
-    delete log_list;
+    list_free(log_list);
 
     va_end(args);
 }
 
 void force_log_flush()
 {
-    mtx.lock();
+    uv_rwlock_wrlock(&queued_logs_lock);
     if (NULL != queued_logs)
         flush_log_data(queued_logs);
-    mtx.unlock();
+    uv_rwlock_wrunlock(&queued_logs_lock);
 }

@@ -25,6 +25,27 @@ enum protocols
 
 static int callback_http (struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
+    switch(reason) {
+        case LWS_CALLBACK_HTTP:
+        case LWS_CALLBACK_HTTP_BODY:
+        case LWS_CALLBACK_HTTP_BODY_COMPLETION:
+        case LWS_CALLBACK_HTTP_DROP_PROTOCOL:
+        case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
+        case LWS_CALLBACK_CLOSED_CLIENT_HTTP:
+        case LWS_CALLBACK_RECEIVE_CLIENT_HTTP:
+        case LWS_CALLBACK_RECEIVE_CLIENT_HTTP_READ:
+        case LWS_CALLBACK_COMPLETED_CLIENT_HTTP:
+        case LWS_CALLBACK_LOCK_POLL:
+        case LWS_CALLBACK_UNLOCK_POLL:
+        case LWS_CALLBACK_ADD_POLL_FD:
+        case LWS_CALLBACK_DEL_POLL_FD:
+        case LWS_CALLBACK_CHANGE_MODE_POLL_FD:
+        case LWS_CALLBACK_GET_THREAD_ID:
+        case LWS_CALLBACK_OPENSSL_PERFORM_CLIENT_CERT_VERIFICATION:
+        case LWS_CALLBACK_OPENSSL_LOAD_EXTRA_SERVER_VERIFY_CERTS:
+            break;
+    }
+
     return 0;
 }
 
@@ -49,9 +70,9 @@ static struct lws_protocols protocols[] = {
     { NULL, NULL, 0, 0 }
 };
 
-static lws_context* build_context(const char* interface)
+static struct lws_context* build_context(const char* interface)
 {
-    lws_context_creation_info info;
+    struct lws_context_creation_info info;
     memset(&info, 0, sizeof info);
 
     info.port = websocket_port;
@@ -82,8 +103,6 @@ static void start_lws_service_timer()
 
     uv_timer_init(uv_default_loop(), service_timer);
     uv_timer_start(service_timer, on_lws_service_timer, service_timer_interval_ms, service_timer_interval_ms);
-
-    log_info("Web interface started.");
 }
 
 void init_webserver()
@@ -97,6 +116,8 @@ void init_webserver()
     }
 
     start_lws_service_timer();
+
+    log_info("Web interface started.");
 }
 
 void shutdown_webserver()
