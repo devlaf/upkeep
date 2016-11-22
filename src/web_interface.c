@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include "libwebsockets.h"
 #include "uv.h"
 #include "serialization.h"
@@ -15,6 +16,7 @@
 struct lws_context* context;
 static uv_timer_t* service_timer;
 static int service_timer_interval_ms = 500;   
+static char* directory_of_executing_assembly = NULL;
 
 enum protocols 
 {
@@ -23,10 +25,72 @@ enum protocols
     PROTOCOL_COUNT
 };
 
-static int callback_http (struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
+static bool is_whitelisted(const char* resource_path)
+{
+    return true;
+}
+
+static char* get_mime_type(const char* resource_path)
+{
+    char *extension = strrchr(resource_path, '.');
+                   
+    if (extension == NULL)
+        return "text/plain";
+    if (strcmp(extension, ".png") == 0)
+        return "image/png";
+    if (strcmp(extension, ".jpg") == 0)
+        return "image/jpg";
+    if (strcmp(extension, ".gif") == 0)
+        return "image/gif";
+    if (strcmp(extension, ".html") == 0)
+        return "text/html";
+    if (strcmp(extension, ".css") == 0)
+        return "text/css";
+    return "text/plain";
+}
+
+static bool serve_file(struct lws* wsi, const char* uri)
+{
+    // TO FIX: Whitelist not implemented, so requests for ../ etc. will allow access to other files on system.
+    // Shouldn't need to alloc for each request
+
+    char* resource_path = (char*)malloc(strlen(directory_of_executing_assembly) + 
+        strlen(static_content_subdirectory) + strlen(uri));
+    
+    sprintf(resource_path, "%s%s%s", directory_of_executing_assembly, 
+        static_content_subdirectory, uri);
+    
+    if (!is_whitelisted(resource_path)) {
+        log_warn("Http client request for file at [%s] was rejected, as it is not part of the whitelist.");
+        return false;
+    }
+
+    char* mime = get_mime_type(resource_path);
+    lws_serve_http_file(wsi, resource_path, mime, NULL, 0);
+
+    free(resource_path);
+    resource_path = NULL;
+
+    return true;
+}
+
+static int callback_http (struct lws* wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
     switch(reason) {
-        case LWS_CALLBACK_HTTP:
+        case LWS_CALLBACK_HTTP: {
+            char* requested_uri = (char*)in;
+
+            log_info("Client requested URI: %s", requested_uri);
+
+            if (strcmp(requested_uri, "/") == 0) 
+                requested_uri = "/index.html";
+            
+            if (!serve_file(wsi, (const char*)requested_uri))
+                return 1;
+            
+            break;
+        }
+
         case LWS_CALLBACK_HTTP_BODY:
         case LWS_CALLBACK_HTTP_BODY_COMPLETION:
         case LWS_CALLBACK_HTTP_DROP_PROTOCOL:
@@ -105,10 +169,27 @@ static void start_lws_service_timer()
     uv_timer_start(service_timer, on_lws_service_timer, service_timer_interval_ms, service_timer_interval_ms);
 }
 
+static bool set_directory_for_executing_assembly()
+{
+    if (directory_of_executing_assembly != NULL)
+        return true;
+
+    directory_of_executing_assembly = (char*)calloc(1, 1024);
+
+    if(getcwd(directory_of_executing_assembly, sizeof(directory_of_executing_assembly)) != NULL)
+        return true;
+    
+    log_error("Failed to retrieve the directory of the executing assembly.");
+    directory_of_executing_assembly = NULL;
+    return false;
+}
+
 void init_webserver()
 {
-    const char* interface = NULL;
+    if (!set_directory_for_executing_assembly())
+        return;
 
+    const char* interface = NULL;
     context = build_context(interface);
     if (context == NULL) {
         log_error("Failed to init the libwebsocket server.");
@@ -127,6 +208,9 @@ void shutdown_webserver()
 
     if(context)
         lws_context_destroy(context);
+
+    free(directory_of_executing_assembly);
+    directory_of_executing_assembly = NULL;
 
     log_info("Web interface stopped.");
 }
