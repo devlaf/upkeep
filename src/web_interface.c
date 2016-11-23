@@ -7,7 +7,6 @@
 #include "web_interface.h"
 
 
-
 // Adapted from example docs here: 
 // https://github.com/warmcat/libwebsockets/blob/master/test-server/test-server.c
 // There are quite a few oddities about required protocol names and orderings 
@@ -17,6 +16,8 @@ struct lws_context* context;
 static uv_timer_t* service_timer;
 static int service_timer_interval_ms = 500;   
 static char* directory_of_executing_assembly = NULL;
+static bool running = false;
+static uv_rwlock_t running_flag_lock;
 
 enum protocols 
 {
@@ -25,51 +26,56 @@ enum protocols
     PROTOCOL_COUNT
 };
 
-static bool is_whitelisted(const char* resource_path)
+typedef struct resource {
+    char* uri;
+    char* resource_path;
+    char* mime_type;
+} resource;
+
+resource whitelist[] = {
+    {"/index.html", NULL, "text/html"},
+    {"/icon.png", NULL, "image/png"}
+};
+
+static void populate_whitelist() 
 {
-    return true;
+    for (int i=0; i<(sizeof(whitelist) / sizeof(resource)); i++) {
+        char* uri = whitelist[i].uri;
+        char* resource_path = (char*)malloc(strlen(directory_of_executing_assembly) + strlen(static_content_subdirectory) + strlen(uri));
+        sprintf(resource_path, "%s%s%s", directory_of_executing_assembly, static_content_subdirectory, uri);
+        whitelist[i].resource_path = resource_path;
+    }
 }
 
-static char* get_mime_type(const char* resource_path)
+static void cleanup_whitelist() 
 {
-    char *extension = strrchr(resource_path, '.');
-                   
-    if (extension == NULL)
-        return "text/plain";
-    if (strcmp(extension, ".png") == 0)
-        return "image/png";
-    if (strcmp(extension, ".jpg") == 0)
-        return "image/jpg";
-    if (strcmp(extension, ".gif") == 0)
-        return "image/gif";
-    if (strcmp(extension, ".html") == 0)
-        return "text/html";
-    if (strcmp(extension, ".css") == 0)
-        return "text/css";
-    return "text/plain";
+    for (int i=0; i<(sizeof(whitelist) / sizeof(resource)); i++) {
+        if (whitelist[i] != NULL) {
+            free(whitelist[i].resource_path);
+            whitelist[i].resource_path = NULL;
+        }
+    }
+}
+
+static resource* search_whitelist(const char* uri)
+{
+    for (int i=0; i<(sizeof(whitelist) / sizeof(resource)); i++) {
+        if(strcmp(uri, whitelist[i].uri) == 0)
+            return &whitelist[i];
+    }
+
+    return NULL;
 }
 
 static bool serve_file(struct lws* wsi, const char* uri)
 {
-    // TO FIX: Whitelist not implemented, so requests for ../ etc. will allow access to other files on system.
-    // Shouldn't need to alloc for each request
-
-    char* resource_path = (char*)malloc(strlen(directory_of_executing_assembly) + 
-        strlen(static_content_subdirectory) + strlen(uri));
-    
-    sprintf(resource_path, "%s%s%s", directory_of_executing_assembly, 
-        static_content_subdirectory, uri);
-    
-    if (!is_whitelisted(resource_path)) {
+    resource* file_data = search_whitelist(uri);
+    if (NULL == file_data) {
         log_warn("Http client request for file at [%s] was rejected, as it is not part of the whitelist.");
         return false;
     }
 
-    char* mime = get_mime_type(resource_path);
-    lws_serve_http_file(wsi, resource_path, mime, NULL, 0);
-
-    free(resource_path);
-    resource_path = NULL;
+    lws_serve_http_file(wsi, file_data->resource_path, file_data->mime_type, NULL, 0);
 
     return true;
 }
@@ -154,6 +160,8 @@ static struct lws_context* build_context(const char* interface)
 
 static void on_lws_service_timer(uv_timer_t* handle)
 {
+    // A call to lws_service(...) will respond to any queued lws requests and kick off the callback_http and callback_ws 
+    // events.  We'll hit this method on a timer every 500ms (defined in service_timer_interval_ms).
     lws_service(context, 0);
 }
 
@@ -169,32 +177,49 @@ static void start_lws_service_timer()
     uv_timer_start(service_timer, on_lws_service_timer, service_timer_interval_ms, service_timer_interval_ms);
 }
 
-static bool set_directory_for_executing_assembly()
+static bool server_already_running()
 {
-    if (directory_of_executing_assembly != NULL)
-        return true;
+    bool retval = false;
 
-    directory_of_executing_assembly = (char*)calloc(1, 1024);
+    uv_rwlock_wrlock(&running_flag_lock);
 
-    if(getcwd(directory_of_executing_assembly, sizeof(directory_of_executing_assembly)) != NULL)
-        return true;
+    if (running) {
+        log_info("Webserver already started.");
+        retval = true;
+    }
+    running = true;
+
+    uv_rwlock_wrunlock(&running_flag_lock);
     
-    log_error("Failed to retrieve the directory of the executing assembly.");
-    directory_of_executing_assembly = NULL;
-    return false;
+    return retval;
+}
+
+static bool set_directory_of_executing_assembly()
+{
+    directory_of_executing_assembly = getcwd(NULL, 0);
+    if (NULL == directory_of_executing_assembly) {
+        log_error("Could not start webserver: Failed to retrieve the directory of the executing assembly.");
+        return false;
+    }
+    return true;
 }
 
 void init_webserver()
 {
-    if (!set_directory_for_executing_assembly())
+    if (server_already_running())
+        return; 
+
+    if (!set_directory_of_executing_assembly())
         return;
 
     const char* interface = NULL;
     context = build_context(interface);
     if (context == NULL) {
-        log_error("Failed to init the libwebsocket server.");
+        log_error("Could not start webserver: Failed to init the libwebsocket server.");
         return;
     }
+
+    populate_whitelist();
 
     start_lws_service_timer();
 
@@ -209,8 +234,14 @@ void shutdown_webserver()
     if(context)
         lws_context_destroy(context);
 
+    cleanup_whitelist();
+
     free(directory_of_executing_assembly);
     directory_of_executing_assembly = NULL;
+
+    uv_rwlock_wrlock(&running_flag_lock);
+    running = false;
+    uv_rwlock_wrunlock(&running_flag_lock);
 
     log_info("Web interface stopped.");
 }

@@ -209,5 +209,7 @@ int main (int argc, char** argv)
 
     init_webserver();
 
+    force_log_flush();
+
     return uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 }
