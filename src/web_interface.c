@@ -37,26 +37,6 @@ resource whitelist[] = {
     {"/icon.png", NULL, "image/png"}
 };
 
-static void populate_whitelist() 
-{
-    for (int i=0; i<(sizeof(whitelist) / sizeof(resource)); i++) {
-        char* uri = whitelist[i].uri;
-        char* resource_path = (char*)malloc(strlen(directory_of_executing_assembly) + strlen(static_content_subdirectory) + strlen(uri));
-        sprintf(resource_path, "%s%s%s", directory_of_executing_assembly, static_content_subdirectory, uri);
-        whitelist[i].resource_path = resource_path;
-    }
-}
-
-static void cleanup_whitelist() 
-{
-    for (int i=0; i<(sizeof(whitelist) / sizeof(resource)); i++) {
-        if (whitelist[i] != NULL) {
-            free(whitelist[i].resource_path);
-            whitelist[i].resource_path = NULL;
-        }
-    }
-}
-
 static resource* search_whitelist(const char* uri)
 {
     for (int i=0; i<(sizeof(whitelist) / sizeof(resource)); i++) {
@@ -71,7 +51,7 @@ static bool serve_file(struct lws* wsi, const char* uri)
 {
     resource* file_data = search_whitelist(uri);
     if (NULL == file_data) {
-        log_warn("Http client request for file at [%s] was rejected, as it is not part of the whitelist.");
+        log_warn("Http client request for file at [%s] was rejected, as it is not part of the whitelist.", file_data->resource_path);
         return false;
     }
 
@@ -160,8 +140,7 @@ static struct lws_context* build_context(const char* interface)
 
 static void on_lws_service_timer(uv_timer_t* handle)
 {
-    // A call to lws_service(...) will respond to any queued lws requests and kick off the callback_http and callback_ws 
-    // events.  We'll hit this method on a timer every 500ms (defined in service_timer_interval_ms).
+    // A call to lws_service(...) will respond to any queued lws requests and kick off the callback_http and callback_ws events.
     lws_service(context, 0);
 }
 
@@ -175,6 +154,36 @@ static void start_lws_service_timer()
 
     uv_timer_init(uv_default_loop(), service_timer);
     uv_timer_start(service_timer, on_lws_service_timer, service_timer_interval_ms, service_timer_interval_ms);
+}
+
+static void populate_whitelist() 
+{
+    for (int i = 0; i < (sizeof(whitelist)/sizeof(resource)); i++) {
+        char* uri = whitelist[i].uri;
+        char* resource_path = (char*)malloc(strlen(directory_of_executing_assembly) + strlen(static_content_subdirectory) + strlen(uri));
+        sprintf(resource_path, "%s%s%s", directory_of_executing_assembly, static_content_subdirectory, uri);
+        whitelist[i].resource_path = resource_path;
+    }
+}
+
+static void cleanup_whitelist() 
+{
+    for (int i = 0; i < (sizeof(whitelist)/sizeof(resource)); i++) {
+        if (whitelist[i].resource_path != NULL) {
+            free(whitelist[i].resource_path);
+            whitelist[i].resource_path = NULL;
+        }
+    }
+}
+
+static bool set_directory_of_executing_assembly()
+{
+    directory_of_executing_assembly = getcwd(NULL, 0);
+    if (NULL == directory_of_executing_assembly) {
+        log_error("Could not start webserver: Failed to retrieve the directory of the executing assembly.");
+        return false;
+    }
+    return true;
 }
 
 static bool server_already_running()
@@ -192,16 +201,6 @@ static bool server_already_running()
     uv_rwlock_wrunlock(&running_flag_lock);
     
     return retval;
-}
-
-static bool set_directory_of_executing_assembly()
-{
-    directory_of_executing_assembly = getcwd(NULL, 0);
-    if (NULL == directory_of_executing_assembly) {
-        log_error("Could not start webserver: Failed to retrieve the directory of the executing assembly.");
-        return false;
-    }
-    return true;
 }
 
 void init_webserver()
