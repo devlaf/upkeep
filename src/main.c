@@ -20,7 +20,6 @@ static int outage_timer_threshold_sec = 120; // Expect devices to update at
 void shutdown_upkeep(int return_code)
 {
     log_info("Upkeep terminating.");
-    force_log_flush();
 
     if(outage_timer) {
         if (uv_is_active((uv_handle_t*)outage_timer))
@@ -29,6 +28,8 @@ void shutdown_upkeep(int return_code)
     }
 
     shutdown_webserver();
+    
+    shutdown_logger();
 
     exit(0);
 }
@@ -198,6 +199,8 @@ int main (int argc, char** argv)
         printf("Version: [%f].  And it's funny that you think this is versioned in any meaningful way.\n", VERSION);
         return 0;
     }
+
+    init_logger();
 
     log_info("upkeep version: %f", VERSION);
 

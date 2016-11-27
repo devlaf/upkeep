@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include "uv.h"
 #include "zlog.h"
 #include "logger.h"
@@ -14,7 +13,9 @@ typedef struct log_data_t {
 
 static list* queued_logs;
 static bool flush_ongoing = false;
+static bool logger_initialized = false;
 static uv_rwlock_t queued_logs_lock;
+static zlog_category_t* zlog_category;
 
 static void set_zlog_error_file()
 {
@@ -73,24 +74,7 @@ static void log_single_entry_synchronous(void* single_entry, void* category)
 
 static void log_collection_synchronous (list* logs)
 {
-    set_zlog_error_file();
-    
-    int rc = zlog_init(zlog_config_filepath);
-    if (rc) {
-        printf("zlog init (synchronous) failed.  See zlog error file for details at [%s].\n", zlog_error_filepath);
-        return;
-    }
-
-    zlog_category_t* category = zlog_get_category(zlog_category);
-    if (!category) {
-        printf("Could not find configuration for zlog category [%s] in %s.\n", zlog_category, zlog_config_filepath);
-        zlog_fini();
-        return;
-    }
-
-    list_foreach(logs, log_single_entry_synchronous, category);
-
-    zlog_fini();
+    list_foreach(logs, log_single_entry_synchronous, zlog_category);
 }
 
 static void free_log_details(void* data, void* args)
@@ -133,7 +117,6 @@ static void schedule_flush()
     uv_rwlock_wrlock(&queued_logs_lock);
     req->data = queued_logs;
     queued_logs = NULL;
-
     uv_rwlock_wrunlock(&queued_logs_lock);
 
     uv_queue_work(uv_default_loop(), req, on_flushing_thread, on_flushing_thread_done);
@@ -170,8 +153,26 @@ static void queue_log(log_type type, const char* msg, va_list args)
         schedule_flush();
 }
 
+static bool set_init_state(bool state)
+{
+    logger_initialized = state;
+}
+
+static bool verify_init()
+{
+    // Not super-threadsafe, however the cost of using the zlog methods
+    // without first reading the config file and setting up the category
+    // (which is done in init_logger) is simply that logs will be printed
+    // to the console in lieu of the file. 
+
+    if(!logger_initialized)
+        printf("Log not initialized: client must call init_logger()\n");
+    return logger_initialized;
+}
+
 void log_info (const char* msg, ...)
 {
+    if (!verify_init()) return;
     va_list args;
     va_start(args, msg);
     queue_log(INFO, msg, args);
@@ -180,6 +181,7 @@ void log_info (const char* msg, ...)
 
 void log_warn (const char* msg, ...)
 {
+    if (!verify_init()) return;
     va_list args;
     va_start(args, msg);
     queue_log(WARN, msg, args);
@@ -188,6 +190,7 @@ void log_warn (const char* msg, ...)
 
 void log_error (const char* msg, ...)
 {
+    if (!verify_init()) return;
     va_list args;
     va_start(args, msg);
     queue_log(ERROR, msg, args);
@@ -196,6 +199,9 @@ void log_error (const char* msg, ...)
 
 void log_synchronous (log_type type, const char* msg, ...)
 {
+    if (!verify_init()) 
+        return;
+
     va_list args;
     va_start(args, msg);
 
@@ -217,8 +223,38 @@ void log_synchronous (log_type type, const char* msg, ...)
 
 void force_log_flush()
 {
+    if (!verify_init()) 
+        return;
+
     uv_rwlock_wrlock(&queued_logs_lock);
-    if (NULL != queued_logs)
-        flush_log_data(queued_logs);
+    flush_log_data(get_queued_logs());
+    queued_logs = NULL;
     uv_rwlock_wrunlock(&queued_logs_lock);
+}
+
+bool init_logger()
+{
+    set_zlog_error_file();
+    
+    int rc = zlog_init(zlog_config_filepath);
+    if (rc) {
+        printf("zlog init failed.  See zlog error file for details at [%s].\n", zlog_error_filepath);
+        return false;
+    }
+
+    zlog_category = zlog_get_category(zlog_category_str);
+    if (!zlog_category) {
+        printf("Could not find configuration for zlog category [%s] in %s.\n", zlog_category, zlog_config_filepath);
+        return false;
+    }
+
+    set_init_state(true);
+    return true;
+}
+
+void shutdown_logger()
+{
+    force_log_flush();
+    zlog_fini();
+    set_init_state(false);
 }
