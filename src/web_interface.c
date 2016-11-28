@@ -4,20 +4,26 @@
 #include "uv.h"
 #include "serialization.h"
 #include "logger.h"
+#include "wi_client_record.h"
 #include "web_interface.h"
-
 
 // Adapted from example docs here: 
 // https://github.com/warmcat/libwebsockets/blob/master/test-server/test-server.c
 // There are quite a few oddities about required protocol names and orderings 
 // (ex. PROTOCOL_HTTP must always be first, PROTOCOL_COUNT last, etc.)
 
+typedef struct resource {
+    char* uri;
+    char* resource_path;
+    char* mime_type;
+} resource;
+
 struct lws_context* context;
 static uv_timer_t* service_timer;
 static int service_timer_interval_ms = 500;   
 static char* directory_of_executing_assembly = NULL;
 static bool running = false;
-static uv_rwlock_t running_flag_lock;
+static uv_rwlock_t running_lock;
 
 enum protocols 
 {
@@ -25,12 +31,6 @@ enum protocols
     PROTOCOL_WS_EVENT,
     PROTOCOL_COUNT
 };
-
-typedef struct resource {
-    char* uri;
-    char* resource_path;
-    char* mime_type;
-} resource;
 
 resource whitelist[] = {
     {"/index.html", NULL, "text/html"},
@@ -76,23 +76,13 @@ static int callback_http (struct lws* wsi, enum lws_callback_reasons reason, voi
             
             break;
         }
+        case LWS_CALLBACK_ESTABLISHED: {
 
-        case LWS_CALLBACK_HTTP_BODY:
-        case LWS_CALLBACK_HTTP_BODY_COMPLETION:
-        case LWS_CALLBACK_HTTP_DROP_PROTOCOL:
-        case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
-        case LWS_CALLBACK_CLOSED_CLIENT_HTTP:
-        case LWS_CALLBACK_RECEIVE_CLIENT_HTTP:
-        case LWS_CALLBACK_RECEIVE_CLIENT_HTTP_READ:
-        case LWS_CALLBACK_COMPLETED_CLIENT_HTTP:
-        case LWS_CALLBACK_LOCK_POLL:
-        case LWS_CALLBACK_UNLOCK_POLL:
-        case LWS_CALLBACK_ADD_POLL_FD:
-        case LWS_CALLBACK_DEL_POLL_FD:
-        case LWS_CALLBACK_CHANGE_MODE_POLL_FD:
-        case LWS_CALLBACK_GET_THREAD_ID:
-        case LWS_CALLBACK_OPENSSL_PERFORM_CLIENT_CERT_VERIFICATION:
-        case LWS_CALLBACK_OPENSSL_LOAD_EXTRA_SERVER_VERIFY_CERTS:
+        }
+        case LWS_CALLBACK_CLOSED: {
+
+        }
+        default:
             break;
     }
 
@@ -101,6 +91,8 @@ static int callback_http (struct lws* wsi, enum lws_callback_reasons reason, voi
 
 static int callback_ws_event (struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
+    // As this websocket interface is supposed to be one-way, all
+    // incoming wsi messages will be dropped on the floor.
     return 0;
 }
 
@@ -190,7 +182,7 @@ static bool server_already_running()
 {
     bool retval = false;
 
-    uv_rwlock_wrlock(&running_flag_lock);
+    uv_rwlock_wrlock(&running_lock);
 
     if (running) {
         log_info("Webserver already started.");
@@ -198,7 +190,7 @@ static bool server_already_running()
     }
     running = true;
 
-    uv_rwlock_wrunlock(&running_flag_lock);
+    uv_rwlock_wrunlock(&running_lock);
     
     return retval;
 }
@@ -218,6 +210,8 @@ void init_webserver()
         return;
     }
 
+    init_client_record();
+
     populate_whitelist();
 
     start_lws_service_timer();
@@ -235,12 +229,14 @@ void shutdown_webserver()
 
     cleanup_whitelist();
 
+    free_client_record();
+
     free(directory_of_executing_assembly);
     directory_of_executing_assembly = NULL;
 
-    uv_rwlock_wrlock(&running_flag_lock);
+    uv_rwlock_wrlock(&running_lock);
     running = false;
-    uv_rwlock_wrunlock(&running_flag_lock);
+    uv_rwlock_wrunlock(&running_lock);
 
     log_info("Web interface stopped.");
 }

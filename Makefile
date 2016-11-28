@@ -27,6 +27,7 @@ SOURCES =	src/main.c \
             src/time_utils.c \
             src/web_interface.c \
             src/list.c \
+            src/wi_client_record.c \
             protobuf_models/uptime_report_msg.pb-c.c
 
 HEADERS =	./include/logger.h \
@@ -35,6 +36,7 @@ HEADERS =	./include/logger.h \
 			./include/time_utils.h \
 			./include/web_interface.h \
 			./include/list.h \
+			./include/wi_client_record.h \
 			./libs/sqlite/sqlite3.h \
 			./libs/sqlite/sqlite3ext.h \
 			./libs/libwebsockets/lib/libwebsockets.h \
