@@ -53,3 +53,19 @@ void list_foreach(struct list* collection, void (*fptr)(void*, void*), void* arg
         node = node->next;
     }
 }
+
+bool list_contains(struct list* collection, bool (*fptr)(void*, void*), void* args)
+{
+    if(NULL == collection)
+        return false;
+
+    element_t* node = collection->head;
+    while (node != NULL)
+    {
+        if ((*fptr)(node->data, args))
+            return true;
+        node = node->next;
+    }
+
+    return false;
+}

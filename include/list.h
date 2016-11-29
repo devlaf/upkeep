@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <stdbool.h>
 
 typedef struct element_t {
     void* data;
@@ -19,3 +20,5 @@ void list_free(struct list* collection);
 void list_append(struct list* collection, void *data);
 
 void list_foreach(struct list* collection, void (*fptr)(void*, void*), void* args);
+
+bool list_contains(struct list* collection, bool (*fptr)(void*, void*), void* args);

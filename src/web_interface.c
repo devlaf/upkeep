@@ -3,6 +3,7 @@
 #include "libwebsockets.h"
 #include "uv.h"
 #include "serialization.h"
+#include "database.h"
 #include "logger.h"
 #include "wi_client_record.h"
 #include "web_interface.h"
@@ -62,37 +63,56 @@ static bool serve_file(struct lws* wsi, const char* uri)
 
 static int callback_http (struct lws* wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
-    switch(reason) {
-        case LWS_CALLBACK_HTTP: {
-            char* requested_uri = (char*)in;
+    if (reason != LWS_CALLBACK_HTTP)
+        return 0;
 
-            log_info("Client requested URI: %s", requested_uri);
+    char* requested_uri = (char*)in;
 
-            if (strcmp(requested_uri, "/") == 0) 
-                requested_uri = "/index.html";
+    log_info("Client requested URI: %s", requested_uri);
+
+    if (strcmp(requested_uri, "/") == 0) 
+        requested_uri = "/index.html";
             
-            if (!serve_file(wsi, (const char*)requested_uri))
-                return 1;
-            
-            break;
-        }
-        case LWS_CALLBACK_ESTABLISHED: {
-
-        }
-        case LWS_CALLBACK_CLOSED: {
-
-        }
-        default:
-            break;
-    }
-
+    if (!serve_file(wsi, (const char*)requested_uri))
+        return 1;
+    
     return 0;
+}
+
+static void send_record(uptime_entry_t* data, void* wsi)
+{
+    uint8_t* serialized = serialize_report(data);
+
+    int len = sizeof(serialized)/sizeof(uint8_t);
+    unsigned char* buf = (unsigned char*)malloc(LWS_SEND_BUFFER_PRE_PADDING + len + LWS_SEND_BUFFER_POST_PADDING);
+    memcpy(buf + LWS_SEND_BUFFER_PRE_PADDING, serialized, len);
+
+    int result = lws_write((struct lws*)wsi, buf + LWS_SEND_BUFFER_PRE_PADDING, len, LWS_WRITE_TEXT);
+
+    free(buf);
+    free(serialized);
 }
 
 static int callback_ws_event (struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
-    // As this websocket interface is supposed to be one-way, all
-    // incoming wsi messages will be dropped on the floor.
+    switch(reason) {
+        case LWS_CALLBACK_ESTABLISHED: {
+            // Send all existing data in DB
+            uptime_record* to_send = get_uptime_record();
+            uptime_record_foreach(to_send, send_record, (void*)wsi);
+            free_uptime_record(to_send);
+        }
+        case LWS_CALLBACK_CLOSED: {
+            log_info("Websocket connection closed by client.");
+        }
+        case LWS_CALLBACK_RECEIVE: {
+            // As this websocket interface is supposed to be one-way, all
+            // incoming wsi messages will be dropped on the floor.
+            break;
+        }
+        default:
+            break;
+    }
     return 0;
 }
 
@@ -187,12 +207,24 @@ static bool server_already_running()
     if (running) {
         log_info("Webserver already started.");
         retval = true;
-    }
+    } 
     running = true;
 
     uv_rwlock_wrunlock(&running_lock);
     
     return retval;
+}
+
+void broadcast_report(uptime_report_t* data) {
+    uint8_t* serialized = serialize_report(data);
+
+    int len = sizeof(serialized)/sizeof(uint8_t);
+    unsigned char* buf = (unsigned char*)malloc(LWS_SEND_BUFFER_PRE_PADDING + len + LWS_SEND_BUFFER_POST_PADDING);
+    memcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], serialized, len);
+
+    // how to broadcast from within service loop?
+
+    free(serialized);
 }
 
 void init_webserver()
