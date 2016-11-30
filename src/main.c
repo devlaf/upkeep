@@ -51,10 +51,21 @@ void on_close (uv_handle_t* handle)
     free(handle); 
 }
 
+void submit_report_to_webserver(uptime_entry_t* record)
+{
+    uptime_report_t* report = (uptime_report_t*)malloc(sizeof(uptime_report_t));
+    report->mac_address = record->mac_address;
+    report->description = record->description;
+    report->uptime = record->uptime;
+    broadcast_report(report);
+    
+    free(report);
+}
+
 void on_device_reboot(uv_work_t* req)
 {
     uptime_entry_t* data = (uptime_entry_t*)req->data;
-    printf("aaaahhhh");
+    submit_report_to_webserver(data);
 }
 
 void on_device_reboot_processed(uv_work_t* req, int status)
@@ -64,7 +75,7 @@ void on_device_reboot_processed(uv_work_t* req, int status)
 
 void on_device_timeout(uptime_entry_t* record)
 {
-    printf("weeeewoooo");
+    submit_report_to_webserver(record);
 }
 
 void assess_timeout_criteria(uptime_entry_t* entry, void* current_time)

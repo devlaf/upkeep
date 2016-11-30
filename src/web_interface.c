@@ -5,7 +5,6 @@
 #include "serialization.h"
 #include "database.h"
 #include "logger.h"
-#include "wi_client_record.h"
 #include "web_interface.h"
 
 // Adapted from example docs here: 
@@ -242,8 +241,6 @@ void init_webserver()
         return;
     }
 
-    init_client_record();
-
     populate_whitelist();
 
     start_lws_service_timer();
@@ -260,8 +257,6 @@ void shutdown_webserver()
         lws_context_destroy(context);
 
     cleanup_whitelist();
-
-    free_client_record();
 
     free(directory_of_executing_assembly);
     directory_of_executing_assembly = NULL;
