@@ -18,9 +18,18 @@ typedef struct resource {
     char* mime_type;
 } resource;
 
+typedef struct per_session_data__ws_event {
+    int ring_buffer_pos;
+} per_session_data__ws_event;
+
+// This ringbuffer is used to keep track of data that should
+// be broadcast to all connected websocket clients.
+static uint8_t* ws_ring_buffer[10];
+static int ws_ringbuffer_current = 0;
+
 struct lws_context* context;
 static uv_timer_t* service_timer;
-static int service_timer_interval_ms = 500;   
+static int service_timer_interval_ms = 500;
 static char* directory_of_executing_assembly = NULL;
 static bool running = false;
 static uv_rwlock_t running_lock;
@@ -78,24 +87,42 @@ static int callback_http (struct lws* wsi, enum lws_callback_reasons reason, voi
     return 0;
 }
 
+static unsigned char* generate_lws_padded_msg(uint8_t* msg, int len)
+{
+    unsigned char* buf = (unsigned char*)malloc(LWS_SEND_BUFFER_PRE_PADDING + 
+        len + LWS_SEND_BUFFER_POST_PADDING);
+    memcpy(buf + LWS_SEND_BUFFER_PRE_PADDING, msg, len);
+    return buf + LWS_SEND_BUFFER_PRE_PADDING;
+}
+
+static void free_lws_padded_msg(unsigned char* msg)
+{
+    if (msg != NULL) {
+        unsigned char* origin = msg - LWS_SEND_BUFFER_PRE_PADDING;
+        free(origin);
+        origin = NULL;
+    }
+}
+
 static void send_record(uptime_entry_t* data, void* wsi)
 {
     uint8_t* serialized = serialize_report(data);
-
     int len = sizeof(serialized)/sizeof(uint8_t);
-    unsigned char* buf = (unsigned char*)malloc(LWS_SEND_BUFFER_PRE_PADDING + len + LWS_SEND_BUFFER_POST_PADDING);
-    memcpy(buf + LWS_SEND_BUFFER_PRE_PADDING, serialized, len);
+    unsigned char* buf = generate_lws_padded_msg(serialized, len);
+    int result = lws_write((struct lws*)wsi, buf, len, LWS_WRITE_TEXT);
 
-    int result = lws_write((struct lws*)wsi, buf + LWS_SEND_BUFFER_PRE_PADDING, len, LWS_WRITE_TEXT);
-
-    free(buf);
+    free_lws_padded_msg(buf);
     free(serialized);
 }
 
 static int callback_ws_event (struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len)
 {
+    per_session_data__ws_event* psd = (per_session_data__ws_event*)user;
+
     switch(reason) {
         case LWS_CALLBACK_ESTABLISHED: {
+            psd->ring_buffer_pos = ws_ringbuffer_current;
+
             // Send all existing data in DB
             uptime_record* to_send = get_uptime_record();
             uptime_record_foreach(to_send, send_record, (void*)wsi);
@@ -109,6 +136,14 @@ static int callback_ws_event (struct lws *wsi, enum lws_callback_reasons reason,
             // incoming wsi messages will be dropped on the floor.
             break;
         }
+        case LWS_CALLBACK_SERVER_WRITEABLE: {
+            while(psd->ring_buffer_pos != ws_ringbuffer_current) {
+                unsigned char* to_write = (unsigned char*) ws_ring_buffer[psd->ring_buffer_pos];
+                lws_write(wsi, (sizeof(to_write) / sizeof(char*)), to_write, LWS_WRITE_TEXT);
+                psd->ring_buffer_pos = (psd->ring_buffer_pos) % 10;
+            }
+            break;
+        }
         default:
             break;
     }
@@ -119,13 +154,12 @@ static struct lws_protocols protocols[] = {
     {
         "http-only",
         callback_http,
-        //sizeof (struct per_session_data__http),
         0,
     },
     {
         "ws-event",
         callback_ws_event,
-        //sizeof(struct per_session_data__ws_event),
+        sizeof(per_session_data__ws_event),
         0,
     },
     { NULL, NULL, 0, 0 }
@@ -187,6 +221,17 @@ static void cleanup_whitelist()
     }
 }
 
+static void cleanup_ringbuffer()
+{
+    for(int i=0; i<(sizeof(ws_ring_buffer)/sizeof(uint8_t*)); i++) {
+        if(ws_ring_buffer[i] != NULL) {
+            free_lws_padded_msg(ws_ring_buffer[i]);
+            ws_ring_buffer[i] = NULL;
+        }
+    }
+    ws_ringbuffer_current = 0;
+}
+
 static bool set_directory_of_executing_assembly()
 {
     directory_of_executing_assembly = getcwd(NULL, 0);
@@ -214,16 +259,21 @@ static bool server_already_running()
     return retval;
 }
 
-void broadcast_report(uptime_report_t* data) {
+void broadcast_report(uptime_report_t* data) 
+{
     uint8_t* serialized = serialize_report(data);
-
     int len = sizeof(serialized)/sizeof(uint8_t);
-    unsigned char* buf = (unsigned char*)malloc(LWS_SEND_BUFFER_PRE_PADDING + len + LWS_SEND_BUFFER_POST_PADDING);
-    memcpy(&buf[LWS_SEND_BUFFER_PRE_PADDING], serialized, len);
+    unsigned char* buf = generate_lws_padded_msg(serialized, len);
 
-    // how to broadcast from within service loop?
+    int ringbuffer_next = (ws_ringbuffer_current + 1) % 10;
 
-    free(serialized);
+    if (ws_ring_buffer[ringbuffer_next] != NULL)
+        free_lws_padded_msg(ws_ring_buffer[ringbuffer_next]);
+
+    ws_ring_buffer[ringbuffer_next] = buf;
+    ws_ringbuffer_current = ringbuffer_next;
+
+    lws_callback_on_writable_all_protocol(context, protocols);
 }
 
 void init_webserver()
@@ -257,6 +307,7 @@ void shutdown_webserver()
         lws_context_destroy(context);
 
     cleanup_whitelist();
+    cleanup_ringbuffer();
 
     free(directory_of_executing_assembly);
     directory_of_executing_assembly = NULL;
