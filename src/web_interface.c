@@ -1,3 +1,20 @@
+/*
+*   A web interface that will push uptime reports to connected 
+*   clients.  This both serves static HTTP content and provides
+*   a websocket server to keep connected clients up-to-date.
+*
+*   Note:
+*   The libwebsockets library, while powerful, is at times
+*   somewhat complex and nonintuitive. There are quite a few 
+*   oddities regarding required protocol names and orderings 
+*   (ex. PROTOCOL_HTTP must always have value zero in required
+*   "protocols" enum, PROTOCOL_COUNT must be last, etc.) Some
+*   good resources can be found in the examples on the official
+*   github page: https://github.com/warmcat/libwebsockets/blob/
+*        master/test-server/test-server.c
+*   and the archived mailing list can also be helpful.
+*/
+
 #include <stdio.h>
 #include <stdbool.h>
 #include "libwebsockets.h"
@@ -6,11 +23,6 @@
 #include "database.h"
 #include "logger.h"
 #include "web_interface.h"
-
-// Adapted from example docs here: 
-// https://github.com/warmcat/libwebsockets/blob/master/test-server/test-server.c
-// There are quite a few oddities about required protocol names and orderings 
-// (ex. PROTOCOL_HTTP must always be first, PROTOCOL_COUNT last, etc.)
 
 typedef struct resource {
     char* uri;
@@ -29,7 +41,7 @@ static int ws_ringbuffer_current = 0;
 
 struct lws_context* context;
 static uv_timer_t* service_timer;
-static int service_timer_interval_ms = 500;
+static const int service_timer_interval_ms = 500;
 static char* directory_of_executing_assembly = NULL;
 static bool running = false;
 static uv_rwlock_t running_lock;

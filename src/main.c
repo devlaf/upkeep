@@ -10,12 +10,12 @@
 #define VERSION    0.1
 
 static char* listen_ip_addr = "0.0.0.0";
-static int   listen_port    = 12001;
+static const int   listen_port    = 12001;
 
 static uv_timer_t* outage_timer;
-static int outage_timer_interval_ms = 60000;   
-static int outage_timer_threshold_sec = 120; // Expect devices to update at 
-                                             // least once every 120 seconds.
+static const int outage_timer_interval_ms = 60000;   
+static const int outage_timer_threshold_sec = 120;  // Expect devices to update at 
+                                                    // least once every 120 seconds.
 
 void shutdown_upkeep(int return_code)
 {
@@ -206,7 +206,11 @@ void listen_for_connections()
 
 int main (int argc, char** argv)
 {
-    if( argc == 2 && (strcmp(argv[1], "-v") == 0) ) {
+    if( argc == 2 && (  (strcmp(argv[1], "-v") == 0) || 
+                        (strcmp(argv[1], "--v") == 0) || 
+                        (strcmp(argv[1], "-version") == 0) || 
+                        (strcmp(argv[1], "--version") == 0))) 
+    {
         printf("Version: [%f].  And it's funny that you think this is versioned in any meaningful way.\n", VERSION);
         return 0;
     }
