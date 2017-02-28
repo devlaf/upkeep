@@ -14,8 +14,7 @@ static const int   listen_port    = 12001;
 
 static uv_timer_t* outage_timer;
 static const int outage_timer_interval_ms = 60000;   
-static const int outage_timer_threshold_sec = 120;  // Expect devices to update at 
-                                                    // least once every 120 seconds.
+static const int outage_timer_threshold_sec = 120;
 
 void shutdown_upkeep(int return_code)
 {

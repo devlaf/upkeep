@@ -4,15 +4,15 @@
 *   a websocket server to keep connected clients up-to-date.
 *
 *   Note:
-*   The libwebsockets library, while powerful, is at times
-*   somewhat complex and nonintuitive. There are quite a few 
-*   oddities regarding required protocol names and orderings 
-*   (ex. PROTOCOL_HTTP must always have value zero in required
-*   "protocols" enum, PROTOCOL_COUNT must be last, etc.) Some
-*   good resources can be found in the examples on the official
-*   github page: https://github.com/warmcat/libwebsockets/blob/
-*        master/test-server/test-server.c
-*   and the archived mailing list can also be helpful.
+*   Working with the libwebsockets libs can be somewhat
+*   nonintuitive at times. There are a few oddities 
+*   regarding required protocol names and orderings (ex. 
+*   PROTOCOL_HTTP must always have value zero in required 
+*   "protocols" enum, PROTOCOL_COUNT must be last, etc.)
+*   Good resources for some of this stuff can be found in
+*   the examples on the official github page: 
+*   https://github.com/warmcat/libwebsockets/blob/master/test-server/test-server.c
+*   The archived mailing list can also be helpful.
 */
 
 #include <stdio.h>

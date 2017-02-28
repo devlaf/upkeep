@@ -9,12 +9,6 @@
 #include "logger.h"
 #include "database.h"
 
-/*  TODO: Make this more async
-*    
-*    As this data is non-critical, I should be storing this in-memory, and 
-*    periodically flushing to disk.  No need to be this quite so consistent.
-*/
-
 bool create_directory(const char* fullPath)
 {
     const char* mkdir = "mkdir -p ";
@@ -195,7 +189,7 @@ uint32_t get_last_known_uptime(const char* mac_address)
 
     if (NULL == record->head)
     	return 0;
-    
+
     uint32_t retval = ((uptime_entry_t*)(record->head->data))->uptime;
     free_uptime_record(record);
     return retval;
@@ -208,8 +202,8 @@ void uptime_record_foreach(uptime_record* collection, void (*fptr)(uptime_entry_
 
 void free_uptime_entry_t(uptime_entry_t* entry)
 {
-	if(NULL == entry)
-		return;
+    if(NULL == entry)
+        return;
 
     free(entry->mac_address);
     free(entry->description);
@@ -218,13 +212,13 @@ void free_uptime_entry_t(uptime_entry_t* entry)
 
 void free_uptime_entry_t_with_args(uptime_entry_t* entry, void* args)
 {
-	free_uptime_entry_t(entry);
+    free_uptime_entry_t(entry);
 }
 
 void free_uptime_record(uptime_record* records)
 {
-	if(NULL == records)
-		return;
+    if(NULL == records)
+        return;
 
     uptime_record_foreach(records, free_uptime_entry_t_with_args, NULL);
     
